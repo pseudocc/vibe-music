@@ -21,12 +21,14 @@
   let lastUrl = null;
   /** @type {string | null} Track id whose saved progress should be applied on next loadedmetadata */
   let pendingResumeFor = null;
+  let pendingPlayAfterTrackAdvance = false;
   let lastSavedAt = 0;
 
   $effect(() => {
     const track = $currentTrack;
     if (!track) {
       src = '';
+      pendingPlayAfterTrackAdvance = false;
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       lastUrl = null;
       return;
@@ -44,6 +46,41 @@
   $effect(() => {
     if (audio) audio.volume = $volume;
   });
+
+  $effect(() => {
+    if (!('mediaSession' in navigator)) return;
+    const mediaSession = navigator.mediaSession;
+    const track = $currentTrack;
+    if (!track) {
+      mediaSession.metadata = null;
+      mediaSession.playbackState = 'none';
+      return;
+    }
+    if ('MediaMetadata' in window) {
+      mediaSession.metadata = new MediaMetadata({
+        title: track.name,
+        artist: 'Local Library',
+        album: 'Vibe Music'
+      });
+    }
+    mediaSession.playbackState = $playing ? 'playing' : 'paused';
+  });
+
+  function updateMediaPositionState() {
+    if (!('mediaSession' in navigator) || !audio) return;
+    if (!isFinite(audio.duration) || audio.duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        position: audio.currentTime,
+        playbackRate: audio.playbackRate || 1
+      });
+    } catch {}
+  }
+
+  function getTrackAdvanceDelayMs() {
+    return document.visibilityState === 'hidden' ? 0 : 1000;
+  }
 
   function togglePlay() {
     if (!audio || !src) return;
@@ -96,11 +133,18 @@
       }
       return;
     }
-    setTimeout(() => {
+    const advance = () => {
       const list2 = $visibleTracks;
       if (!list2.length) return;
+      pendingPlayAfterTrackAdvance = true;
       nextTrack({ fromEnded: true });
-    }, 1000);
+    };
+    const delay = getTrackAdvanceDelayMs();
+    if (delay <= 0) {
+      advance();
+      return;
+    }
+    setTimeout(advance, delay);
   }
 
   function cycleMode() {
@@ -165,11 +209,17 @@
       }
       pendingResumeFor = null;
     }
+    if (pendingPlayAfterTrackAdvance) {
+      pendingPlayAfterTrackAdvance = false;
+      audio.play().catch(() => {});
+    }
+    updateMediaPositionState();
   }
 
   function onTimeUpdate() {
     if (!audio || seeking) return;
     currentTime = audio.currentTime;
+    updateMediaPositionState();
     const now = performance.now();
     if (now - lastSavedAt > 2000 && $currentTrack) {
       lastSavedAt = now;
@@ -312,18 +362,63 @@
     if (volumeEl.hasPointerCapture(e.pointerId)) volumeEl.releasePointerCapture(e.pointerId);
   }
 
+  function installMediaSessionHandlers() {
+    if (!('mediaSession' in navigator)) return;
+    const mediaSession = navigator.mediaSession;
+    mediaSession.setActionHandler('play', () => {
+      if (audio && src) audio.play();
+    });
+    mediaSession.setActionHandler('pause', () => {
+      if (audio) audio.pause();
+    });
+    mediaSession.setActionHandler('previoustrack', () => {
+      prevTrack();
+    });
+    mediaSession.setActionHandler('nexttrack', () => {
+      nextTrack();
+    });
+    mediaSession.setActionHandler('seekbackward', (details) => {
+      seekBy(-(details.seekOffset || 10));
+    });
+    mediaSession.setActionHandler('seekforward', (details) => {
+      seekBy(details.seekOffset || 10);
+    });
+    mediaSession.setActionHandler('seekto', (details) => {
+      if (!audio) return;
+      if (typeof details.seekTime !== 'number') return;
+      audio.currentTime = Math.max(0, Math.min(audio.duration || Infinity, details.seekTime));
+      currentTime = audio.currentTime;
+      updateMediaPositionState();
+      persistProgressNow();
+    });
+  }
+
+  function applyPlaybackAudioSessionHint() {
+    /** @type {{ audioSession?: { type: string } }} */
+    const nav = navigator;
+    if (!nav.audioSession) return;
+    try {
+      nav.audioSession.type = 'playback';
+    } catch {}
+  }
+
   onMount(() => {
+    applyPlaybackAudioSessionHint();
+    installMediaSessionHandlers();
+
     const handler = () => persistProgressNow();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') persistProgressNow();
+    };
     window.addEventListener('pagehide', handler);
     window.addEventListener('beforeunload', handler);
     window.addEventListener('keydown', onShortcut);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') persistProgressNow();
-    });
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('pagehide', handler);
       window.removeEventListener('beforeunload', handler);
       window.removeEventListener('keydown', onShortcut);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       persistProgressNow();
     };
@@ -335,7 +430,7 @@
   <audio
     bind:this={audio}
     {src}
-    onplay={() => playing.set(true)}
+    onplay={() => { applyPlaybackAudioSessionHint(); playing.set(true); updateMediaPositionState(); }}
     onpause={() => { playing.set(false); persistProgressNow(); }}
     onended={onEnded}
     onloadedmetadata={onLoadedMetadata}

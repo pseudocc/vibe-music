@@ -1,4 +1,5 @@
 /.direnv
 /dist
 *.mp3
+*.vtt
 /node_modules
