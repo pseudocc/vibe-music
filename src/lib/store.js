@@ -77,8 +77,22 @@ export const playlists = writable(loadPlaylists());
 playMode.set(loadSettings().playMode);
 
 volume.subscribe((v) => saveSettings({ ...loadSettings(), volume: v }));
-currentId.subscribe((id) => saveSettings({ ...loadSettings(), lastId: id }));
-activePlaylistId.subscribe((id) => saveSettings({ ...loadSettings(), activePlaylistId: id }));
+let didInitCurrentId = false;
+currentId.subscribe((id) => {
+  if (!didInitCurrentId) {
+    didInitCurrentId = true;
+    return;
+  }
+  saveSettings({ ...loadSettings(), lastId: id });
+});
+let didInitActivePlaylistId = false;
+activePlaylistId.subscribe((id) => {
+  if (!didInitActivePlaylistId) {
+    didInitActivePlaylistId = true;
+    return;
+  }
+  saveSettings({ ...loadSettings(), activePlaylistId: id });
+});
 playMode.subscribe((m) => saveSettings({ ...loadSettings(), playMode: m }));
 playlists.subscribe((pls) => savePlaylists(pls));
 

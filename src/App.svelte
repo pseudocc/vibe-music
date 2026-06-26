@@ -8,11 +8,52 @@
   import TrashBin from './components/TrashBin.svelte';
   import { refreshTracks, restoreLast, activePlaylistId, playlists } from './lib/store.js';
   import { initPWA } from './lib/pwa.js';
+  import pkg from '../package.json';
 
-  onMount(async () => {
+  const STAR_FALLBACK = 42;
+  const APP_VERSION = `v${pkg.version}`;
+  const STAR_OWNER = 'pseudoc';
+  const STAR_REPO = 'vibe-music';
+  const STAR_URL = `https://github.com/${STAR_OWNER}/${STAR_REPO}`;
+
+  let stars = $state(STAR_FALLBACK);
+
+  async function refreshStars() {
+    if (!navigator.onLine) {
+      stars = STAR_FALLBACK;
+      return;
+    }
+    try {
+      const res = await fetch(`https://api.github.com/repos/${STAR_OWNER}/${STAR_REPO}`);
+      if (!res.ok) throw new Error('GitHub API request failed');
+      const data = await res.json();
+      stars = Number.isFinite(data?.stargazers_count) ? data.stargazers_count : STAR_FALLBACK;
+    } catch {
+      stars = STAR_FALLBACK;
+    }
+  }
+
+  onMount(() => {
+    const onOnline = () => {
+      refreshStars();
+    };
+    const onOffline = () => {
+      stars = STAR_FALLBACK;
+    };
+
     initPWA();
-    await refreshTracks();
-    restoreLast();
+    refreshTracks().then(() => {
+      restoreLast();
+    });
+    refreshStars();
+
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   });
 
   const activeName = $derived.by(() => {
@@ -23,7 +64,16 @@
 
 <main>
   <header>
-    <h1>🎵 Vibe Music</h1>
+    <div class="title-row">
+      <div class="title-main">
+        <h1>🎵 Vibe Music</h1>
+        <span class="version-badge" aria-label="App version">{APP_VERSION}</span>
+      </div>
+      <a class="star-badge" href={STAR_URL} target="_blank" rel="noreferrer noopener" aria-label="GitHub stars">
+        <span class="star" aria-hidden="true">★</span>
+        <span>{stars}</span>
+      </a>
+    </div>
     <p class="tagline">Local-first MP3 player · works offline</p>
   </header>
 
@@ -77,6 +127,53 @@
     margin: 0.25rem 0 0;
     color: var(--subtle);
     font-size: 0.9rem;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .title-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--hl-med);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--subtle);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 85%, transparent), var(--hl-low));
+    white-space: nowrap;
+  }
+  .star-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--hl-med);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 85%, transparent), var(--hl-low));
+  }
+  .star-badge:hover {
+    border-color: var(--iris);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--overlay) 90%, transparent), var(--hl-med));
+  }
+  .star {
+    color: var(--gold);
+    line-height: 1;
   }
   .layout {
     display: grid;
