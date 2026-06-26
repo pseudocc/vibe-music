@@ -12,7 +12,7 @@
 
   const STAR_FALLBACK = 42;
   const APP_VERSION = `v${pkg.version}`;
-  const STAR_OWNER = 'pseudoc';
+  const STAR_OWNER = 'pseudocc';
   const STAR_REPO = 'vibe-music';
   const STAR_URL = `https://github.com/${STAR_OWNER}/${STAR_REPO}`;
 

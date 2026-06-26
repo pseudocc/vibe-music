@@ -1,5 +1,7 @@
 # Vibe Music
 
+Live: https://pseudocc.github.io/vibe-music/
+
 An offline-first PWA MP3 player built with Svelte. Upload local audio files; they're stored in your browser (IndexedDB) so the app works fully offline after the first load.
 
 ## Features
