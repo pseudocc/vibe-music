@@ -16,11 +16,32 @@ export function initPWA() {
       offlineReady.set(true);
     },
     onRegisteredSW(_url, registration) {
-      if (registration) {
-        setInterval(() => {
-          registration.update().catch(() => {});
-        }, 60 * 60 * 1000);
-      }
+      if (!registration) return;
+      let lastCheckAt = 0;
+      const MIN_GAP_MS = 30 * 1000;
+      const PERIODIC_MS = 15 * 60 * 1000;
+
+      const checkForUpdate = () => {
+        if (!navigator.onLine) return;
+        const now = Date.now();
+        if (now - lastCheckAt < MIN_GAP_MS) return;
+        lastCheckAt = now;
+        registration.update().catch(() => {});
+      };
+
+      // Initial + delayed check to catch fresh deploys soon after startup.
+      checkForUpdate();
+      setTimeout(checkForUpdate, 5000);
+
+      // Safari/iOS can pause long timers/background tasks; check again on resume/focus/online.
+      window.addEventListener('pageshow', checkForUpdate);
+      window.addEventListener('focus', checkForUpdate);
+      window.addEventListener('online', checkForUpdate);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate();
+      });
+
+      setInterval(checkForUpdate, PERIODIC_MS);
     }
   });
 }
