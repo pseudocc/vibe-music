@@ -77,10 +77,10 @@
     flex-direction: column;
     gap: 0.25rem;
     max-height: min(52vh, 30rem);
-    overflow-y: auto;
+    overflow-y: scroll;
     overscroll-behavior: contain;
     padding-right: 0.2rem;
-    scrollbar-gutter: stable;
+    scrollbar-gutter: stable both-edges;
   }
   .list::-webkit-scrollbar {
     width: 8px;

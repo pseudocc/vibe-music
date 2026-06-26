@@ -33,6 +33,11 @@ body {
   min-height: 100vh;
 }
 
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
   background:
     radial-gradient(ellipse at 10% -10%, rgba(196, 167, 231, 0.45), transparent 45%),
